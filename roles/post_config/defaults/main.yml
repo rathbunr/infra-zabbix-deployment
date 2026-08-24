@@ -1,0 +1,18 @@
+---
+# Defaults for post-configuration (API-driven setup).
+zabbix_api_url: "https://{{ zabbix_server_fqdn }}/api_jsonrpc.php"
+zabbix_api_user: "Admin"
+# zabbix_admin_password injected by credential
+zabbix_api_validate_certs: true
+zabbix_api_login_timeout: 300          # seconds to wait for API readiness
+
+# Host registration
+zabbix_self_host_name: "{{ inventory_hostname }}"
+zabbix_self_host_groups:
+  - "Zabbix servers"
+zabbix_self_host_templates:
+  - "Zabbix server health"             # Official template name in 7.0 LTS
+
+# Media type (email)
+zabbix_mediatype_name: "Email"
+zabbix_mediatype_type: 0               # 0 = email

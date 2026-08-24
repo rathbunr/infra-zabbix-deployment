@@ -1,0 +1,34 @@
+---
+# site.yml – Fully automated deployment of a standalone Zabbix 7.0 LTS server
+#            on RHEL 10.2 under Ansible Automation Platform 2.7.
+#
+# Usage (AAP Job Template):
+#   Extra variables can override any default.
+#   Credentials of types "Zabbix Database", "Zabbix Admin" and "TLS Certificate"
+#   must be attached to the Job Template.
+#
+# Tags: prereqs, postgresql, zabbix_server, zabbix_web, zabbix_agent, postconfig
+
+- name: Deploy standalone Zabbix 7.0 LTS server
+  hosts: zabbix_servers
+  become: true
+  gather_facts: true
+
+  roles:
+    - role: prereqs
+      tags: [prereqs]
+
+    - role: postgresql
+      tags: [postgresql]
+
+    - role: zabbix_server
+      tags: [zabbix_server]
+
+    - role: zabbix_web
+      tags: [zabbix_web]
+
+    - role: zabbix_agent
+      tags: [zabbix_agent]
+
+    - role: post_config
+      tags: [postconfig]

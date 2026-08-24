@@ -1,0 +1,23 @@
+---
+# Defaults for the postgresql role – tuned for a typical 16 GB RAM / 4 vCPU Zabbix server.
+postgresql_version: "16"
+postgresql_data_dir: "/var/lib/pgsql/data"
+postgresql_conf_dir: "/var/lib/pgsql/data"
+
+# Authentication method for the zabbix-server user (scram-sha-256 is preferred on PG 16).
+postgresql_auth_method: "scram-sha-256"
+
+# Memory tuning (sane defaults for 16 GB RAM).
+postgresql_shared_buffers: "4GB"
+postgresql_work_mem: "64MB"
+postgresql_maintenance_work_mem: "1GB"
+postgresql_effective_cache_size: "12GB"
+postgresql_max_connections: 150
+postgresql_checkpoint_completion_target: "0.9"
+postgresql_wal_buffers: "16MB"
+postgresql_default_statistics_target: 100
+postgresql_random_page_cost: "1.1"          # SSD-friendly
+postgresql_effective_io_concurrency: 200
+
+# TimescaleDB
+timescaledb_package: "timescaledb-2-postgresql-16"   # Adjust if Zabbix repo ships a different name

@@ -1,0 +1,16 @@
+---
+# Defaults for the prereqs role.
+zabbix_release_rpm_url: "https://repo.zabbix.com/zabbix/7.0/release/rhel/10/noarch/zabbix-release-latest.el10.noarch.rpm"
+
+# Firewall ports that must be open on a standalone Zabbix server.
+zabbix_firewall_ports:
+  - { port: "443/tcp",  proto: "tcp", service: null }   # Nginx HTTPS
+  - { port: "10051/tcp", proto: "tcp", service: null }  # Zabbix server
+  - { port: "10050/tcp", proto: "tcp", service: null }  # Zabbix agent (self-monitoring)
+
+# SELinux booleans required for Zabbix + Nginx + PostgreSQL on RHEL 10.
+# Only set if the boolean exists on the target (checked at runtime).
+zabbix_selinux_booleans:
+  - httpd_can_connect_zabbix
+  - httpd_can_network_connect_db
+  - zabbix_can_network

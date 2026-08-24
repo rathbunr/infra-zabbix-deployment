@@ -1,0 +1,103 @@
+---
+# Role: zabbix_web
+# Purpose: Deploy the Zabbix 7.0 LTS web frontend behind Nginx + PHP-FPM.
+#          Uses community.zabbix.zabbix_web where possible and supplies a
+#          complete Nginx configuration because RHEL 10 minimal installs do not
+#          ship Apache and the collection still leans toward httpd on some
+#          versions.
+# Reference: https://galaxy.ansible.com/ui/repo/published/community/zabbix/
+
+- name: "Include community.zabbix.zabbix_web role (packages + PHP configuration)"
+  ansible.builtin.include_role:
+    name: community.zabbix.zabbix_web
+  vars:
+    zabbix_web_version: "{{ zabbix_web_version }}"
+    zabbix_server_name: "{{ zabbix_server_fqdn }}"
+    zabbix_url: "https://{{ zabbix_server_fqdn }}"
+    zabbix_server_database: pgsql
+    zabbix_server_dbhost: localhost
+    zabbix_server_dbname: "{{ zabbix_db_name }}"
+    zabbix_server_dbuser: "{{ zabbix_db_user }}"
+    zabbix_server_dbpassword: "{{ zabbix_db_password }}"
+    zabbix_web_server: "{{ zabbix_web_server }}"
+    zabbix_php_fpm_conf_user: nginx
+    zabbix_php_fpm_conf_group: nginx
+    zabbix_php_fpm_conf_listen_user: nginx
+    zabbix_php_fpm_conf_listen_group: nginx
+  no_log: true
+
+- name: "Ensure Nginx and PHP-FPM packages are present (RHEL 10)"
+  ansible.builtin.dnf:
+    name:
+      - nginx
+      - php-fpm
+      - php-pgsql
+      - php-bcmath
+      - php-mbstring
+      - php-xml
+      - php-gd
+      - php-ldap
+      - php-json
+    state: present
+  # community.zabbix.zabbix_web may already install some of these; the task is idempotent.
+
+- name: "Write TLS certificate from AAP credential"
+  ansible.builtin.copy:
+    content: "{{ zabbix_tls_cert }}"
+    dest: "{{ zabbix_tls_cert_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: "Write TLS private key from AAP credential"
+  ansible.builtin.copy:
+    content: "{{ zabbix_tls_key }}"
+    dest: "{{ zabbix_tls_key_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: reload nginx
+
+- name: "Deploy Nginx server block for Zabbix"
+  ansible.builtin.template:
+    src: zabbix_nginx.conf.j2
+    dest: /etc/nginx/conf.d/zabbix.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: reload nginx
+
+- name: "Remove default Nginx welcome page configuration if present"
+  ansible.builtin.file:
+    path: /etc/nginx/conf.d/default.conf
+    state: absent
+  notify: reload nginx
+
+- name: "Tune PHP-FPM pool for Zabbix workload"
+  ansible.builtin.lineinfile:
+    path: /etc/php-fpm.d/www.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - { regexp: '^;?pm.max_children\s*=',          line: "pm.max_children = {{ zabbix_php_fpm_max_children }}" }
+    - { regexp: '^;?pm.start_servers\s*=',         line: "pm.start_servers = {{ zabbix_php_fpm_start_servers }}" }
+    - { regexp: '^;?pm.min_spare_servers\s*=',     line: "pm.min_spare_servers = {{ zabbix_php_fpm_min_spare_servers }}" }
+    - { regexp: '^;?pm.max_spare_servers\s*=',     line: "pm.max_spare_servers = {{ zabbix_php_fpm_max_spare_servers }}" }
+    - { regexp: '^;?php_admin_value\[memory_limit\]', line: "php_admin_value[memory_limit] = {{ zabbix_php_memory_limit }}" }
+    - { regexp: '^;?php_admin_value\[max_execution_time\]', line: "php_admin_value[max_execution_time] = {{ zabbix_php_max_execution_time }}" }
+    - { regexp: '^;?php_admin_value\[post_max_size\]', line: "php_admin_value[post_max_size] = {{ zabbix_php_post_max_size }}" }
+    - { regexp: '^;?php_admin_value\[upload_max_filesize\]', line: "php_admin_value[upload_max_filesize] = {{ zabbix_php_upload_max_filesize }}" }
+    - { regexp: '^;?php_admin_value\[max_input_time\]', line: "php_admin_value[max_input_time] = {{ zabbix_php_max_input_time }}" }
+    - { regexp: '^;?php_admin_value\[date.timezone\]', line: "php_admin_value[date.timezone] = {{ zabbix_php_date_timezone }}" }
+  notify: restart php-fpm
+
+- name: "Ensure Nginx and PHP-FPM services are running and enabled"
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - nginx
+    - php-fpm

@@ -1,0 +1,104 @@
+---
+# Role: prereqs
+# Purpose: Validate host readiness, configure repositories, SELinux policy,
+#          firewall, timezone and baseline packages for Zabbix 7.0 LTS on RHEL 10.2.
+# References:
+#   - https://www.zabbix.com/download?zabbix=7.0&os_distribution=red_hat_enterprise_linux&os_version=10&components=server_frontend_agent&db=pgsql&ws=nginx
+#   - RHEL 10 SELinux packaging notes (zabbix-selinux-policy-main)
+
+- name: "Validate connectivity to target host"
+  ansible.builtin.ping:
+
+- name: "Assert that the system is registered with Red Hat Subscription Manager"
+  ansible.builtin.command: subscription-manager status
+  register: rhsm_status
+  changed_when: false
+  failed_when: rhsm_status.rc != 0
+  # We only assert; we never attempt to register (operator responsibility).
+
+- name: "Assert that BaseOS and AppStream repositories are enabled"
+  ansible.builtin.command: dnf repolist enabled
+  register: dnf_repolist
+  changed_when: false
+  failed_when: >
+    ('BaseOS' not in dnf_repolist.stdout) or
+    ('AppStream' not in dnf_repolist.stdout)
+
+- name: "Install Zabbix 7.0 LTS release RPM to enable the official repository"
+  ansible.builtin.dnf:
+    name: "{{ zabbix_release_rpm_url }}"
+    state: present
+    disable_gpg_check: false
+  # The release RPM adds the zabbix repo; subsequent package installs pull from it.
+
+- name: "Disable any non-LTS Zabbix repository streams that the release RPM may have enabled"
+  ansible.builtin.command: >
+    dnf config-manager --set-disabled zabbix-non-supported
+  register: disable_non_lts
+  changed_when: "'Nothing to do' not in disable_non_lts.stdout"
+  failed_when: false
+  # Some release RPMs enable extra streams; we keep only the 7.0 LTS path.
+
+- name: "Rebuild DNF metadata cache after repository changes"
+  ansible.builtin.command: dnf makecache
+  changed_when: false
+
+- name: "Install baseline packages required by later roles and collections"
+  ansible.builtin.dnf:
+    name:
+      - policycoreutils-python-utils   # semanage / SELinux boolean management
+      - python3-psycopg2               # community.postgresql dependency
+      - python3-libselinux             # ansible.posix.seboolean dependency
+      - python3-libsemanage
+    state: present
+
+- name: "Set system timezone"
+  community.general.timezone:
+    name: "{{ zabbix_server_timezone | default('UTC') }}"
+  # Implements RHEL timedatectl best practice; also aligns PHP date.timezone later.
+
+- name: "Ensure firewalld is running and enabled"
+  ansible.builtin.service:
+    name: firewalld
+    state: started
+    enabled: true
+
+- name: "Open required firewall ports for Zabbix server + Nginx"
+  ansible.posix.firewalld:
+    port: "{{ item.port }}"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop: "{{ zabbix_firewall_ports }}"
+  notify: reload firewalld
+
+- name: "Check whether the conflicting package selinux-policy-targeted-extra is installed"
+  ansible.builtin.package_facts:
+    manager: auto
+
+- name: "Remove selinux-policy-targeted-extra if present (conflicts with zabbix-selinux-policy-main)"
+  ansible.builtin.dnf:
+    name: selinux-policy-targeted-extra
+    state: absent
+  when: "'selinux-policy-targeted-extra' in ansible_facts.packages"
+  # RHEL 10 specific: zabbix-selinux-policy-main and selinux-policy-targeted-extra conflict.
+
+- name: "Install Zabbix SELinux policy package for RHEL 10 (zabbix-selinux-policy-main)"
+  ansible.builtin.dnf:
+    name: zabbix-selinux-policy-main
+    state: present
+  # Official Zabbix SELinux policy for EL10; never set SELinux to permissive.
+
+- name: "Gather available SELinux booleans"
+  ansible.builtin.command: getsebool -a
+  register: sebool_list
+  changed_when: false
+
+- name: "Set required SELinux booleans (only if they exist on this system)"
+  ansible.posix.seboolean:
+    name: "{{ item }}"
+    state: true
+    persistent: true
+  loop: "{{ zabbix_selinux_booleans }}"
+  when: item in sebool_list.stdout
+  # Guards against missing booleans on minimal RHEL 10 installs.

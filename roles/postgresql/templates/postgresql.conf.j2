@@ -1,0 +1,63 @@
+# {{ ansible_managed }}
+# PostgreSQL 16 configuration tuned for Zabbix 7.0 LTS
+# Reference: https://www.postgresql.org/docs/16/runtime-config.html
+#            Zabbix documentation – Database size & performance recommendations
+
+#------------------------------------------------------------------------------
+# CONNECTIONS AND AUTHENTICATION
+#------------------------------------------------------------------------------
+listen_addresses = 'localhost'
+port = 5432
+max_connections = {{ postgresql_max_connections }}
+
+#------------------------------------------------------------------------------
+# RESOURCE USAGE (except WAL)
+#------------------------------------------------------------------------------
+shared_buffers = {{ postgresql_shared_buffers }}
+work_mem = {{ postgresql_work_mem }}
+maintenance_work_mem = {{ postgresql_maintenance_work_mem }}
+effective_cache_size = {{ postgresql_effective_cache_size }}
+effective_io_concurrency = {{ postgresql_effective_io_concurrency }}
+
+#------------------------------------------------------------------------------
+# WRITE-AHEAD LOG
+#------------------------------------------------------------------------------
+wal_buffers = {{ postgresql_wal_buffers }}
+checkpoint_completion_target = {{ postgresql_checkpoint_completion_target }}
+
+#------------------------------------------------------------------------------
+# QUERY TUNING
+#------------------------------------------------------------------------------
+random_page_cost = {{ postgresql_random_page_cost }}
+default_statistics_target = {{ postgresql_default_statistics_target }}
+
+#------------------------------------------------------------------------------
+# REPORTING AND LOGGING
+#------------------------------------------------------------------------------
+log_destination = 'stderr'
+logging_collector = on
+log_directory = 'log'
+log_filename = 'postgresql-%a.log'
+log_rotation_age = 1d
+log_rotation_size = 0
+log_truncate_on_rotation = on
+log_line_prefix = '%m [%p] %q%u@%d '
+log_timezone = '{{ zabbix_server_timezone | default("UTC") }}'
+
+#------------------------------------------------------------------------------
+# CLIENT CONNECTION DEFAULTS
+#------------------------------------------------------------------------------
+datestyle = 'iso, mdy'
+timezone = '{{ zabbix_server_timezone | default("UTC") }}'
+lc_messages = 'en_US.UTF-8'
+lc_monetary = 'en_US.UTF-8'
+lc_numeric = 'en_US.UTF-8'
+lc_time = 'en_US.UTF-8'
+default_text_search_config = 'pg_catalog.english'
+
+{% if zabbix_timescaledb_enabled | default(false) %}
+#------------------------------------------------------------------------------
+# TIMESCALEDB
+#------------------------------------------------------------------------------
+shared_preload_libraries = 'timescaledb'
+{% endif %}

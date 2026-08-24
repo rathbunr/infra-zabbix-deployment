@@ -1,0 +1,64 @@
+# {{ ansible_managed }}
+# Nginx server block for Zabbix 7.0 LTS frontend
+# Reference: https://www.zabbix.com/documentation/7.0/en/manual/installation/install_from_packages/frontend
+
+{% if zabbix_nginx_http_redirect | default(true) %}
+server {
+    listen      80;
+    listen      [::]:80;
+    server_name {{ zabbix_nginx_server_name }};
+    return 301  https://$host$request_uri;
+}
+{% endif %}
+
+server {
+    listen              {{ zabbix_nginx_listen_port }} ssl http2;
+    listen              [::]:{{ zabbix_nginx_listen_port }} ssl http2;
+    server_name         {{ zabbix_nginx_server_name }};
+
+    root                {{ zabbix_nginx_docroot }};
+    index               index.php;
+
+    # TLS material written by the playbook from AAP credential
+    ssl_certificate     {{ zabbix_tls_cert_path }};
+    ssl_certificate_key {{ zabbix_tls_key_path }};
+
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+
+    client_max_body_size {{ zabbix_nginx_client_max_body_size }};
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ \.php$ {
+        fastcgi_pass         unix:/run/php-fpm/www.sock;
+        fastcgi_index        index.php;
+        fastcgi_param        SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include              fastcgi_params;
+        fastcgi_param        HTTPS on;
+        fastcgi_read_timeout 300;
+    }
+
+    location ~ /\.ht {
+        deny all;
+    }
+
+    location ~ /(api\/|conf[^\.]|include|locale|vendor) {
+        deny all;
+        return 404;
+    }
+
+    access_log  /var/log/nginx/zabbix_access.log;
+    error_log   /var/log/nginx/zabbix_error.log;
+}

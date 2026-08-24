@@ -1,0 +1,65 @@
+---
+# Role: zabbix_server
+# Purpose: Install and configure the Zabbix 7.0 LTS server daemon using the
+#          official community.zabbix.zabbix_server role. After the role finishes
+#          optionally apply the TimescaleDB schema migration.
+# Reference: https://galaxy.ansible.com/ui/repo/published/community/zabbix/
+
+- name: "Include community.zabbix.zabbix_server role"
+  ansible.builtin.include_role:
+    name: community.zabbix.zabbix_server
+  vars:
+    zabbix_server_version: "{{ zabbix_server_version }}"
+    zabbix_server_database: "{{ zabbix_server_database }}"
+    zabbix_server_database_long: "{{ zabbix_server_database_long }}"
+    zabbix_server_dbhost: "{{ zabbix_server_dbhost }}"
+    zabbix_server_dbname: "{{ zabbix_server_dbname }}"
+    zabbix_server_dbuser: "{{ zabbix_server_dbuser }}"
+    zabbix_server_dbpassword: "{{ zabbix_server_dbpassword }}"
+    zabbix_server_dbport: "{{ zabbix_server_dbport }}"
+    zabbix_server_cachesize: "{{ zabbix_server_cachesize }}"
+    zabbix_server_historycachesize: "{{ zabbix_server_historycachesize }}"
+    zabbix_server_historyindexcachesize: "{{ zabbix_server_historyindexcachesize }}"
+    zabbix_server_trendcachesize: "{{ zabbix_server_trendcachesize }}"
+    zabbix_server_valuecachesize: "{{ zabbix_server_valuecachesize }}"
+    zabbix_server_startpollers: "{{ zabbix_server_startpollers }}"
+    zabbix_server_startpollersunreachable: "{{ zabbix_server_startpollersunreachable }}"
+    zabbix_server_starttrappers: "{{ zabbix_server_starttrappers }}"
+    zabbix_server_startpingers: "{{ zabbix_server_startpingers }}"
+    zabbix_server_startdiscoverers: "{{ zabbix_server_startdiscoverers }}"
+    zabbix_server_starthttppollers: "{{ zabbix_server_starthttppollers }}"
+    zabbix_server_timeout: "{{ zabbix_server_timeout }}"
+  no_log: true   # Protects the database password that is passed through
+
+- name: "Ensure zabbix-server service is running and enabled"
+  ansible.builtin.service:
+    name: zabbix-server
+    state: started
+    enabled: true
+
+- name: "Check whether TimescaleDB hypertables already exist (idempotency guard)"
+  community.postgresql.postgresql_query:
+    db: "{{ zabbix_db_name }}"
+    query: >
+      SELECT count(*) AS cnt
+      FROM timescaledb_information.hypertables
+      WHERE hypertable_name = 'history';
+  become: true
+  become_user: postgres
+  register: timescale_check
+  when: zabbix_timescaledb_enabled | default(false)
+  failed_when: false
+  changed_when: false
+
+- name: "Apply Zabbix TimescaleDB schema migration when enabled and not yet applied"
+  ansible.builtin.shell: |
+    set -o pipefail
+    cat {{ zabbix_timescaledb_schema_sql }} | sudo -u zabbix psql -d {{ zabbix_db_name }} -v ON_ERROR_STOP=1
+  args:
+    executable: /bin/bash
+  when:
+    - zabbix_timescaledb_enabled | default(false)
+    - timescale_check.query_result is defined
+    - (timescale_check.query_result[0].cnt | int) == 0
+  # The official schema.sql is idempotent for most objects; the hypertable check
+  # prevents unnecessary re-execution on subsequent runs.

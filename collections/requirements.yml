@@ -1,0 +1,12 @@
+---
+# Official collections required by the Zabbix 7.0 LTS deployment playbook.
+# Pin minimum versions that are known to work with AAP 2.7 / EE based on RHEL 9.
+collections:
+  - name: community.zabbix
+    version: ">=4.2.0"
+  - name: community.postgresql
+    version: ">=3.0.0"
+  - name: community.general
+    version: ">=9.0.0"
+  - name: ansible.posix
+    version: ">=1.5.0"

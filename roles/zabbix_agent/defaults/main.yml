@@ -1,0 +1,12 @@
+---
+# Defaults for Zabbix Agent 2 (self-monitoring of the Zabbix server).
+zabbix_agent2: true
+zabbix_agent_server: "127.0.0.1"
+zabbix_agent_serveractive: "127.0.0.1"
+zabbix_agent_hostname: "{{ inventory_hostname }}"
+zabbix_agent_version: "7.0"
+zabbix_agent_package_state: present
+zabbix_agent_listenport: 10050
+zabbix_agent_timeout: 4
+zabbix_agent_enable_remote_commands: false
+zabbix_agent_logremotecommands: 0

@@ -1,0 +1,54 @@
+---
+# Site-specific variables for the Zabbix server host group.
+# Secrets (passwords, TLS material) are injected at runtime by AAP Custom Credential Types.
+# Do NOT place real secrets in this file.
+
+# ---------------------------------------------------------------------------
+# Identity & networking
+# ---------------------------------------------------------------------------
+zabbix_server_fqdn: "zabbix01.example.com"          # Must match the certificate CN/SAN
+zabbix_server_timezone: "UTC"                       # System & PHP timezone
+
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
+zabbix_db_name: "zabbix_server"
+zabbix_db_user: "zabbix-server"
+# zabbix_db_password is injected by the "Zabbix Database" credential type
+
+# ---------------------------------------------------------------------------
+# TimescaleDB (optional but recommended)
+# ---------------------------------------------------------------------------
+zabbix_timescaledb_enabled: true
+
+# ---------------------------------------------------------------------------
+# TLS (written to disk by the playbook)
+# ---------------------------------------------------------------------------
+zabbix_tls_cert_path: "/etc/pki/tls/certs/zabbix.crt"
+zabbix_tls_key_path: "/etc/pki/tls/private/zabbix.key"
+# zabbix_tls_cert and zabbix_tls_key are injected by the "TLS Certificate" credential type
+
+# ---------------------------------------------------------------------------
+# Web UI admin password (replaces the default "zabbix")
+# ---------------------------------------------------------------------------
+# zabbix_admin_password is injected by the "Zabbix Admin" credential type
+
+# ---------------------------------------------------------------------------
+# Backup
+# ---------------------------------------------------------------------------
+zabbix_backup_dir: "/var/lib/zabbix/backups"
+zabbix_backup_retention_days: 7
+zabbix_backup_hour: "2"
+zabbix_backup_minute: "30"
+
+# ---------------------------------------------------------------------------
+# SMTP (for media type configuration)
+# ---------------------------------------------------------------------------
+zabbix_smtp_server: "smtp.example.com"
+zabbix_smtp_port: 587
+zabbix_smtp_helo: "{{ zabbix_server_fqdn }}"
+zabbix_smtp_email: "zabbix@example.com"
+zabbix_smtp_security: "STARTTLS"          # none | STARTTLS | SSL/TLS
+zabbix_smtp_authentication: "username_password"
+zabbix_smtp_username: "zabbix@example.com"
+# zabbix_smtp_password can be injected via another credential if desired

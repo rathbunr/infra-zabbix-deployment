@@ -1,0 +1,184 @@
+---
+# Role: post_config
+# Purpose: Final API-driven configuration – change default Admin password,
+#          register the server as a monitored host, configure a notification
+#          media type, and install a daily PostgreSQL backup cron job.
+# IMPORTANT: All Zabbix API modules that require the httpapi connection are
+#            delegated to localhost (or run in a separate play) so they do not
+#            conflict with the SSH connection used for the rest of the playbook.
+# Reference: https://www.zabbix.com/documentation/7.0/en/manual/api
+
+- name: "Wait until the Zabbix API endpoint becomes reachable"
+  ansible.builtin.uri:
+    url: "{{ zabbix_api_url }}"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "apiinfo.version"
+      params: []
+      id: 1
+    status_code: 200
+    validate_certs: "{{ zabbix_api_validate_certs }}"
+  register: api_ready
+  until: api_ready.status == 200
+  retries: 30
+  delay: 10
+  delegate_to: localhost
+  become: false
+
+- name: "Attempt login with the default Admin/zabbix credentials to decide whether password change is needed"
+  ansible.builtin.uri:
+    url: "{{ zabbix_api_url }}"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "user.login"
+      params:
+        username: "Admin"
+        password: "zabbix"
+      id: 1
+    status_code: 200
+    validate_certs: "{{ zabbix_api_validate_certs }}"
+  register: default_login
+  failed_when: false
+  no_log: true
+  delegate_to: localhost
+  become: false
+
+- name: "Change default Admin password when the default still works"
+  ansible.builtin.uri:
+    url: "{{ zabbix_api_url }}"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "user.update"
+      params:
+        userid: "1"
+        passwd: "{{ zabbix_admin_password }}"
+      auth: "{{ default_login.json.result }}"
+      id: 2
+    status_code: 200
+    validate_certs: "{{ zabbix_api_validate_certs }}"
+  when:
+    - default_login.status == 200
+    - default_login.json.result is defined
+  no_log: true
+  delegate_to: localhost
+  become: false
+  # Only runs on first deployment; subsequent runs see a failed default login and skip.
+
+- name: "Login with the (new) Admin password for subsequent API calls"
+  ansible.builtin.uri:
+    url: "{{ zabbix_api_url }}"
+    method: POST
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "user.login"
+      params:
+        username: "Admin"
+        password: "{{ zabbix_admin_password }}"
+      id: 1
+    status_code: 200
+    validate_certs: "{{ zabbix_api_validate_certs }}"
+  register: admin_login
+  no_log: true
+  delegate_to: localhost
+  become: false
+
+- name: "Ensure host group 'Zabbix servers' exists"
+  community.zabbix.zabbix_group:
+    host_groups:
+      - name: "Zabbix servers"
+    state: present
+  vars:
+    ansible_network_os: community.zabbix.zabbix
+    ansible_connection: httpapi
+    ansible_host: "{{ zabbix_server_fqdn }}"
+    ansible_httpapi_use_ssl: true
+    ansible_httpapi_validate_certs: "{{ zabbix_api_validate_certs }}"
+    ansible_zabbix_url_path: ""
+    ansible_user: "Admin"
+    ansible_httpapi_pass: "{{ zabbix_admin_password }}"
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: "Register the Zabbix server itself as a monitored host"
+  community.zabbix.zabbix_host:
+    host_name: "{{ zabbix_self_host_name }}"
+    visible_name: "{{ zabbix_self_host_name }}"
+    host_groups: "{{ zabbix_self_host_groups }}"
+    link_templates: "{{ zabbix_self_host_templates }}"
+    status: enabled
+    state: present
+    interfaces:
+      - type: 1
+        main: 1
+        useip: 1
+        ip: "127.0.0.1"
+        dns: ""
+        port: "10050"
+  vars:
+    ansible_network_os: community.zabbix.zabbix
+    ansible_connection: httpapi
+    ansible_host: "{{ zabbix_server_fqdn }}"
+    ansible_httpapi_use_ssl: true
+    ansible_httpapi_validate_certs: "{{ zabbix_api_validate_certs }}"
+    ansible_zabbix_url_path: ""
+    ansible_user: "Admin"
+    ansible_httpapi_pass: "{{ zabbix_admin_password }}"
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: "Configure Email media type"
+  community.zabbix.zabbix_mediatype:
+    name: "{{ zabbix_mediatype_name }}"
+    type: email
+    smtp_server: "{{ zabbix_smtp_server }}"
+    smtp_port: "{{ zabbix_smtp_port }}"
+    smtp_helo: "{{ zabbix_smtp_helo }}"
+    smtp_email: "{{ zabbix_smtp_email }}"
+    smtp_security: "{{ zabbix_smtp_security }}"
+    smtp_authentication: "{{ zabbix_smtp_authentication }}"
+    username: "{{ zabbix_smtp_username | default(omit) }}"
+    password: "{{ zabbix_smtp_password | default(omit) }}"
+    state: present
+  vars:
+    ansible_network_os: community.zabbix.zabbix
+    ansible_connection: httpapi
+    ansible_host: "{{ zabbix_server_fqdn }}"
+    ansible_httpapi_use_ssl: true
+    ansible_httpapi_validate_certs: "{{ zabbix_api_validate_certs }}"
+    ansible_zabbix_url_path: ""
+    ansible_user: "Admin"
+    ansible_httpapi_pass: "{{ zabbix_admin_password }}"
+  delegate_to: localhost
+  become: false
+  no_log: true
+  when: zabbix_smtp_server is defined
+
+- name: "Create backup directory owned by zabbix user"
+  ansible.builtin.file:
+    path: "{{ zabbix_backup_dir }}"
+    state: directory
+    owner: zabbix
+    group: zabbix
+    mode: "0750"
+
+- name: "Install daily PostgreSQL backup cron job for the Zabbix database"
+  ansible.builtin.cron:
+    name: "Zabbix PostgreSQL daily backup"
+    user: zabbix
+    hour: "{{ zabbix_backup_hour }}"
+    minute: "{{ zabbix_backup_minute }}"
+    job: >
+      /usr/bin/pg_dump -U {{ zabbix_db_user }} -h localhost {{ zabbix_db_name }}
+      | /usr/bin/gzip > {{ zabbix_backup_dir }}/zabbix_server_$(date +\%F).sql.gz
+      && find {{ zabbix_backup_dir }} -name 'zabbix_server_*.sql.gz' -mtime +{{ zabbix_backup_retention_days }} -delete
+    state: present
+  # Retention is handled by the find command; the job is fully idempotent.

@@ -1,0 +1,15 @@
+---
+- name: reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+
+- name: restart nginx
+  ansible.builtin.service:
+    name: nginx
+    state: restarted
+
+- name: restart php-fpm
+  ansible.builtin.service:
+    name: php-fpm
+    state: restarted

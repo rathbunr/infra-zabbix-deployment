@@ -1,0 +1,22 @@
+---
+# Execution Environment definition for AAP 2.7 (EE v3 format).
+# Base image: official minimal EE for Ansible Automation Platform 2.7 on RHEL 9.
+version: 3
+
+images:
+  base_image:
+    name: registry.redhat.io/ansible-automation-platform-27/ee-minimal-rhel9:latest
+
+dependencies:
+  galaxy: collections/requirements.yml
+  python:
+    - psycopg2-binary>=2.9.9   # Required by community.postgresql when connecting as non-root
+  system:
+    - openssh-clients
+    - sshpass                 # Optional; useful for non-key based testing only
+
+additional_build_steps:
+  prepend_base:
+    - RUN dnf -y install python3-pip && dnf clean all
+  append_base:
+    - RUN pip3 install --upgrade pip

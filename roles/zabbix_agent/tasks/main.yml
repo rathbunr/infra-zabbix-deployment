@@ -1,0 +1,23 @@
+---
+# Role: zabbix_agent
+# Purpose: Install Zabbix Agent 2 on the Zabbix server itself so that the
+#          server can monitor its own health, processes and performance.
+# Reference: https://galaxy.ansible.com/ui/repo/published/community/zabbix/
+
+- name: "Include community.zabbix.zabbix_agent role (Agent 2)"
+  ansible.builtin.include_role:
+    name: community.zabbix.zabbix_agent
+  vars:
+    zabbix_agent2: "{{ zabbix_agent2 }}"
+    zabbix_agent_server: "{{ zabbix_agent_server }}"
+    zabbix_agent_serveractive: "{{ zabbix_agent_serveractive }}"
+    zabbix_agent_hostname: "{{ zabbix_agent_hostname }}"
+    zabbix_agent_version: "{{ zabbix_agent_version }}"
+    zabbix_agent_listenport: "{{ zabbix_agent_listenport }}"
+    zabbix_agent_timeout: "{{ zabbix_agent_timeout }}"
+
+- name: "Ensure zabbix-agent2 service is running and enabled"
+  ansible.builtin.service:
+    name: zabbix-agent2
+    state: started
+    enabled: true

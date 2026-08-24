@@ -1,0 +1,101 @@
+---
+# Role: postgresql
+# Purpose: Install, initialise and configure PostgreSQL 16 for Zabbix 7.0 LTS.
+#          Optionally enable TimescaleDB extension.
+# References:
+#   - https://www.zabbix.com/documentation/7.0/en/manual/installation/install_from_packages/rhel
+#   - https://docs.timescale.com/self-hosted/latest/install/installation-linux/
+
+- name: "Install PostgreSQL 16 server and contrib packages from AppStream"
+  ansible.builtin.dnf:
+    name:
+      - postgresql-server
+      - postgresql-contrib
+      - postgresql
+    state: present
+  # RHEL 10 AppStream provides PostgreSQL 16 as the default stream.
+
+- name: "Check whether PostgreSQL data directory has already been initialised"
+  ansible.builtin.stat:
+    path: "{{ postgresql_data_dir }}/PG_VERSION"
+  register: pg_data_dir
+
+- name: "Initialise PostgreSQL database cluster (idempotent)"
+  ansible.builtin.command: postgresql-setup --initdb
+  when: not pg_data_dir.stat.exists
+  # Guarded by the presence of PG_VERSION; safe to re-run the playbook.
+
+- name: "Enable and start PostgreSQL service"
+  ansible.builtin.service:
+    name: postgresql
+    state: started
+    enabled: true
+
+- name: "Template pg_hba.conf for local scram-sha-256 authentication of the Zabbix user"
+  ansible.builtin.template:
+    src: pg_hba.conf.j2
+    dest: "{{ postgresql_conf_dir }}/pg_hba.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+    backup: true
+  notify: reload postgresql
+  # Implements Zabbix requirement for password-based auth from localhost.
+
+- name: "Template postgresql.conf with Zabbix-oriented tuning"
+  ansible.builtin.template:
+    src: postgresql.conf.j2
+    dest: "{{ postgresql_conf_dir }}/postgresql.conf"
+    owner: postgres
+    group: postgres
+    mode: "0600"
+    backup: true
+  notify: restart postgresql
+  # shared_preload_libraries change (TimescaleDB) requires a full restart.
+
+- name: "Flush handlers so configuration is active before database creation"
+  ansible.builtin.meta: flush_handlers
+
+- name: "Create Zabbix database user with scram-sha-256 password"
+  community.postgresql.postgresql_user:
+    name: "{{ zabbix_db_user }}"
+    password: "{{ zabbix_db_password }}"
+    role_attr_flags: "LOGIN"
+    state: present
+  become: true
+  become_user: postgres
+  no_log: true
+  # Password injected by AAP Custom Credential Type "Zabbix Database".
+
+- name: "Create Zabbix database owned by the Zabbix user"
+  community.postgresql.postgresql_db:
+    name: "{{ zabbix_db_name }}"
+    owner: "{{ zabbix_db_user }}"
+    encoding: UTF8
+    lc_collate: en_US.UTF-8
+    lc_ctype: en_US.UTF-8
+    template: template0
+    state: present
+  become: true
+  become_user: postgres
+
+- name: "Install TimescaleDB packages when enabled"
+  ansible.builtin.dnf:
+    name: "{{ timescaledb_package }}"
+    state: present
+  when: zabbix_timescaledb_enabled | default(false)
+  notify: restart postgresql
+  # Package name may vary; adjust defaults/main.yml if the Zabbix or Timescale repo differs.
+
+- name: "Flush handlers to ensure TimescaleDB is loaded"
+  ansible.builtin.meta: flush_handlers
+  when: zabbix_timescaledb_enabled | default(false)
+
+- name: "Enable TimescaleDB extension in the Zabbix database"
+  community.postgresql.postgresql_query:
+    db: "{{ zabbix_db_name }}"
+    query: "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;"
+  become: true
+  become_user: postgres
+  when: zabbix_timescaledb_enabled | default(false)
+  # Idempotent; CASCADE pulls in required supporting objects.

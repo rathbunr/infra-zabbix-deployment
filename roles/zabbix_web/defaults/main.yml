@@ -1,0 +1,23 @@
+---
+# Defaults for the Zabbix web frontend (Nginx + PHP-FPM).
+zabbix_web_version: "7.0"
+zabbix_web_server: nginx                 # Force Nginx (community.zabbix may default to Apache)
+
+# PHP-FPM pool tuning
+zabbix_php_fpm_max_children: 50
+zabbix_php_fpm_start_servers: 5
+zabbix_php_fpm_min_spare_servers: 5
+zabbix_php_fpm_max_spare_servers: 35
+zabbix_php_memory_limit: "256M"
+zabbix_php_max_execution_time: 300
+zabbix_php_post_max_size: "16M"
+zabbix_php_upload_max_filesize: "2M"
+zabbix_php_max_input_time: 300
+zabbix_php_date_timezone: "{{ zabbix_server_timezone | default('UTC') }}"
+
+# Nginx
+zabbix_nginx_listen_port: 443
+zabbix_nginx_http_redirect: true
+zabbix_nginx_server_name: "{{ zabbix_server_fqdn }}"
+zabbix_nginx_docroot: "/usr/share/zabbix"
+zabbix_nginx_client_max_body_size: "16M"

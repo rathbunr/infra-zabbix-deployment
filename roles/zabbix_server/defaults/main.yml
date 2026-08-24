@@ -1,0 +1,39 @@
+---
+# Defaults passed to community.zabbix.zabbix_server role and local overrides.
+zabbix_server_version: "7.0"
+zabbix_server_package_state: present
+zabbix_server_install_recommends: false
+
+# Database connection (must match postgresql role)
+zabbix_server_database: pgsql
+zabbix_server_database_long: postgresql
+zabbix_server_dbhost: localhost
+zabbix_server_dbname: "{{ zabbix_db_name }}"
+zabbix_server_dbuser: "{{ zabbix_db_user }}"
+zabbix_server_dbpassword: "{{ zabbix_db_password }}"
+zabbix_server_dbport: 5432
+zabbix_server_dbhost_run_install: true
+zabbix_server_install_database_client: true
+
+# Performance tuning (exposed for easy override)
+zabbix_server_cachesize: "128M"
+zabbix_server_historycachesize: "64M"
+zabbix_server_historyindexcachesize: "16M"
+zabbix_server_trendcachesize: "16M"
+zabbix_server_valuecachesize: "128M"
+zabbix_server_startpollers: 10
+zabbix_server_startpollersunreachable: 2
+zabbix_server_starttrappers: 5
+zabbix_server_startpingers: 2
+zabbix_server_startdiscoverers: 1
+zabbix_server_starthttppollers: 2
+zabbix_server_starttimers: 1
+zabbix_server_startescalators: 1
+zabbix_server_startalerters: 3
+zabbix_server_startpreprocessors: 4
+zabbix_server_timeout: 4
+zabbix_server_logfilesize: 10
+zabbix_server_debuglevel: 3
+
+# TimescaleDB migration script path (shipped by zabbix-server-pgsql package)
+zabbix_timescaledb_schema_sql: "/usr/share/zabbix-sql-scripts/postgresql/timescaledb/schema.sql"
